@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>5抜きダイス Web版 v1.3</title>
+  <style>
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", "Noto Sans JP", sans-serif;
+      background: #f4f6fb;
+      color: #1f2937;
+    }
+    .app { max-width: 760px; margin: 0 auto; padding: 14px; padding-bottom: 40px; }
+    header { text-align: center; padding: 16px 0 8px; }
+    h1 { margin: 0; font-size: 28px; letter-spacing: .04em; }
+    .sub { color: #6b7280; font-size: 13px; margin-top: 4px; }
+    .card {
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 18px;
+      padding: 15px;
+      margin: 13px 0;
+      box-shadow: 0 8px 22px rgba(15,23,42,.08);
+    }
+    .title { font-weight: 800; font-size: 17px; margin-bottom: 10px; }
+    .row { display: flex; gap: 9px; align-items: center; flex-wrap: wrap; }
+    .between { display: flex; justify-content: space-between; gap: 10px; align-items: center; flex-wrap: wrap; }
+    label { display: flex; gap: 7px; align-items: center; margin: 8px 0; font-size: 15px; }
+    input[type="checkbox"] { transform: scale(1.18); }
+    select, button {
+      font: inherit;
+      border-radius: 12px;
+      border: 1px solid #d1d5db;
+      padding: 10px 12px;
+      background: #fff;
+    }
+    button { font-weight: 800; cursor: pointer; }
+    button:active { transform: scale(.98); }
+    button:disabled { opacity: .42; cursor: not-allowed; }
+    .primary { background: #2563eb; color: white; border-color: #2563eb; }
+    .stop { background: #f59e0b; color: white; border-color: #f59e0b; }
+    .danger { background: #dc2626; color: white; border-color: #dc2626; }
+    .ghost { background: #f9fafb; }
+    .small { color: #6b7280; font-size: 13px; }
+    .ok { color: #16a34a; font-weight: 800; }
+    .ng { color: #dc2626; font-weight: 800; }
+    .scoreboard { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .scorebox { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 14px; padding: 12px; }
+    .scorebox.active { outline: 3px solid rgba(37,99,235,.18); border-color: #93c5fd; }
+    .score-name { color: #6b7280; font-size: 13px; }
+    .score-main { font-size: 22px; font-weight: 900; }
+    .dice-area { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 12px; }
+    @media (min-width: 520px) { .dice-area { grid-template-columns: repeat(6, 1fr); } }
+    .die {
+      aspect-ratio: 1 / 1;
+      border-radius: 18px;
+      border: 2px solid #e5e7eb;
+      background: linear-gradient(180deg, #fff, #f9fafb);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 31px;
+      font-weight: 900;
+      box-shadow: 0 5px 12px rgba(15,23,42,.08);
+      user-select: none;
+      transition: transform .08s, background .12s, border-color .12s;
+    }
+    .die.selected { border-color: #2563eb; background: #eff6ff; outline: 4px solid rgba(37,99,235,.16); }
+    .die.rolling {
+      background: #fff7ed;
+      border-color: #fdba74;
+      transform: scale(1.03) rotate(-1deg);
+    }
+    .message { background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 14px; padding: 12px; min-height: 48px; white-space: pre-line; }
+    .combo-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+    .combo-chip { border: 1px solid #e5e7eb; background: #f9fafb; border-radius: 999px; padding: 7px 10px; font-size: 13px; }
+    .combo-chip.best { background: #ecfdf5; border-color: #86efac; }
+    .history { max-height: 230px; overflow: auto; }
+    .history-item { padding: 8px 0; border-bottom: 1px solid #e5e7eb; font-size: 14px; }
+    .notice { background: #fffbeb; border-color: #fde68a; }
+    .footer { text-align: center; color: #6b7280; font-size: 12px; margin-top: 16px; }
+  </style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>5抜きダイス</h1>
+    <div class="sub">ストップで出目確定。5を作って消す。残った合計が失点。</div>
+  </header>
+
+  <section class="card notice">
+    <div class="title">動作チェック</div>
+    <div id="jsStatus" class="ng">JavaScriptが動いていません。Safari / Chromeで開いてください。</div>
+    <div class="small">iPhoneの「ファイル」アプリのプレビューではボタンが動かないことがあります。</div>
+  </section>
+
+  <section class="card">
+    <div class="title">ゲーム設定</div>
+    <div class="row">
+      <label>モード
+        <select id="mode">
+          <option value="solo">ひとり練習</option>
+          <option value="cpu" selected>CPU対戦</option>
+        </select>
+      </label>
+      <label>ラウンド
+        <select id="roundMax">
+          <option value="1">1</option>
+          <option value="3" selected>3</option>
+          <option value="5">5</option>
+        </select>
+      </label>
+      <label>サイコロ
+        <select id="diceCount">
+          <option value="6" selected>6個</option>
+          <option value="7">7個</option>
+          <option value="8">8個</option>
+        </select>
+      </label>
+    </div>
+    <label><input type="checkbox" id="ruleOne" checked> 1回で消せるのは1セットだけ</label>
+    <label><input type="checkbox" id="ruleChip" checked> ボーナスチップを付与する</label>
+    <label><input type="checkbox" id="ruleReroll" checked> チップ5枚で詰み盤面を振り直し</label>
+    <div class="row" style="margin-top:12px;">
+      <button class="primary" id="startButton" type="button">ゲーム開始</button>
+      <button class="ghost" id="resetButton" type="button">リセット</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="between">
+      <div>
+        <div class="title">スコア</div>
+        <div class="small" id="roundInfo">未開始</div>
+      </div>
+      <div class="small" id="ruleInfo"></div>
+    </div>
+    <div class="scoreboard">
+      <div class="scorebox" id="boxPlayer">
+        <div class="score-name">あなた</div>
+        <div class="score-main"><span id="playerTotal">0</span> 点</div>
+        <div class="small">今回: <span id="playerCurrent">-</span> / チップ: <span id="playerChips">0</span></div>
+      </div>
+      <div class="scorebox" id="boxCpu">
+        <div class="score-name">CPU</div>
+        <div class="score-main"><span id="cpuTotal">0</span> 点</div>
+        <div class="small">今回: <span id="cpuCurrent">-</span> / チップ: <span id="cpuChips">0</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="between">
+      <div>
+        <div class="title">盤面</div>
+        <div class="small" id="turnInfo">ゲームを開始してください</div>
+      </div>
+      <div class="small">選択合計: <span id="selectedSum">0</span></div>
+    </div>
+
+    <div id="diceArea" class="dice-area"></div>
+
+    <div class="row" style="margin-top:14px;">
+      <button class="stop" id="stopButton" type="button" disabled>ストップ</button>
+      <button class="primary" id="removeButton" type="button" disabled>選んだ5を取り除く</button>
+      <button class="ghost" id="rerollButton" type="button" disabled>チップ5枚で振り直し</button>
+      <button class="danger" id="endButton" type="button" disabled>この挑戦を終了</button>
+    </div>
+
+    <div style="margin-top:12px;">
+      <div class="message" id="message">準備OK。ゲーム開始を押してください。</div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="title">作れる5</div>
+    <div class="small">現在の盤面から作れる組み合わせです。</div>
+    <div id="comboList" class="combo-list"></div>
+  </section>
+
+  <section class="card">
+    <div class="title">履歴</div>
+    <div id="history" class="history"></div>
+  </section>
+
+  <div class="footer">Ver.1.3 / ルーレット風サイコロ / CPUレベル固定 / スマホ対応</div>
+</div>
+
+<script>
+(function () {
+  var state = {
+    started: false,
+    mode: "cpu",
+    round: 1,
+    roundMax: 3,
+    diceCount: 6,
+    active: "player",
+    dice: [],
+    selected: {},
+    oneSet: true,
+    chipRule: true,
+    rerollRule: true,
+    rolling: false,
+    rollingCount: 0,
+    rollingTimer: null,
+    cpuTimer: null,
+    player: { total: 0, current: "-", chips: 0, finished: false },
+    cpu: { total: 0, current: "-", chips: 0, finished: false },
+    history: []
+  };
+
+  function el(id) { return document.getElementById(id); }
+  function rollDie() { return Math.floor(Math.random() * 6) + 1; }
+  function rollDice(n) {
+    var a = [];
+    for (var i = 0; i < n; i++) a.push(rollDie());
+    return a;
+  }
+  function arrSum(a) {
+    var t = 0;
+    for (var i = 0; i < a.length; i++) t += a[i];
+    return t;
+  }
+  function activeName() { return state.active === "player" ? "あなた" : "CPU"; }
+  function activeObj() { return state.active === "player" ? state.player : state.cpu; }
+
+  function clearTimers() {
+    if (state.rollingTimer) {
+      clearInterval(state.rollingTimer);
+      state.rollingTimer = null;
+    }
+    if (state.cpuTimer) {
+      clearTimeout(state.cpuTimer);
+      state.cpuTimer = null;
+    }
+  }
+
+  function selectedIndices() {
+    var a = [];
+    for (var k in state.selected) if (state.selected[k]) a.push(Number(k));
+    a.sort(function (x, y) { return x - y; });
+    return a;
+  }
+
+  function selectedValues() {
+    var ids = selectedIndices();
+    var a = [];
+    for (var i = 0; i < ids.length; i++) a.push(state.dice[ids[i]]);
+    return a;
+  }
+
+  function addHistory(text) {
+    state.history.unshift(text);
+    renderHistory();
+  }
+
+  function getCombos(dice) {
+    var res = [];
+    function backtrack(start, idx, vals, total) {
+      if (total === 5 && idx.length > 0) {
+        res.push({ indices: idx.slice(), values: vals.slice() });
+        return;
+      }
+      if (total >= 5) return;
+      for (var i = start; i < dice.length; i++) {
+        var v = dice[i];
+        if (v > 5) continue;
+        idx.push(i);
+        vals.push(v);
+        backtrack(i + 1, idx, vals, total + v);
+        idx.pop();
+        vals.pop();
+      }
+    }
+    backtrack(0, [], [], 0);
+    return res;
+  }
+
+  function reward(values) {
+    if (!state.chipRule) return 0;
+    if (values.length === 1 && values[0] === 5) return 0;
+    if (values.length === 2) return 1;
+    if (values.length >= 3) return 2;
+    return 0;
+  }
+
+  function findFivePartition(values) {
+    if (values.length === 0) return null;
+    if (arrSum(values) % 5 !== 0) return null;
+
+    var used = [];
+    for (var i = 0; i < values.length; i++) used[i] = false;
+
+    function searchGroups(groups) {
+      var start = -1;
+      for (var i = 0; i < values.length; i++) {
+        if (!used[i]) { start = i; break; }
+      }
+      if (start === -1) return groups;
+
+      var current = [];
+      function buildCombo(pos, total) {
+        if (total === 5) {
+          for (var a = 0; a < current.length; a++) used[current[a]] = true;
+          var groupVals = [];
+          for (var b = 0; b < current.length; b++) groupVals.push(values[current[b]]);
+          var result = searchGroups(groups.concat([groupVals]));
+          if (result) return result;
+          for (var c = 0; c < current.length; c++) used[current[c]] = false;
+          return null;
+        }
+        if (total > 5) return null;
+
+        for (var j = pos; j < values.length; j++) {
+          if (used[j]) continue;
+          current.push(j);
+          var result2 = buildCombo(j + 1, total + values[j]);
+          if (result2) return result2;
+          current.pop();
+        }
+        return null;
+      }
+      return buildCombo(start, 0);
+    }
+    return searchGroups([]);
+  }
+
+  function selectedRemovalInfo() {
+    var vals = selectedValues();
+    if (state.oneSet) {
+      if (arrSum(vals) === 5) return { ok: true, groups: [vals] };
+      return { ok: false, groups: [] };
+    }
+    var groups = findFivePartition(vals);
+    if (groups) return { ok: true, groups: groups };
+    return { ok: false, groups: [] };
+  }
+
+  function selectedIsFive() {
+    return selectedRemovalInfo().ok;
+  }
+
+  function readSettings() {
+    state.mode = el("mode").value;
+    state.roundMax = Number(el("roundMax").value);
+    state.diceCount = Number(el("diceCount").value);
+    state.oneSet = el("ruleOne").checked;
+    state.chipRule = el("ruleChip").checked;
+    state.rerollRule = el("ruleReroll").checked;
+  }
+
+  function startGame() {
+    clearTimers();
+    readSettings();
+    state.started = true;
+    state.round = 1;
+    state.active = "player";
+    state.player = { total: 0, current: "-", chips: 0, finished: false };
+    state.cpu = { total: 0, current: "-", chips: 0, finished: state.mode === "solo" };
+    state.history = [];
+    addHistory("ゲーム開始");
+    startChallenge("player");
+  }
+
+  function resetGame() {
+    clearTimers();
+    state.started = false;
+    state.round = 1;
+    state.active = "player";
+    state.dice = [];
+    state.selected = {};
+    state.rolling = false;
+    state.rollingCount = 0;
+    state.player = { total: 0, current: "-", chips: 0, finished: false };
+    state.cpu = { total: 0, current: "-", chips: 0, finished: false };
+    state.history = [];
+    el("message").textContent = "準備OK。ゲーム開始を押してください。";
+    render();
+  }
+
+  function startChallenge(who) {
+    state.active = who;
+    state.selected = {};
+    var p = activeObj();
+    p.chips = 0;
+    p.current = "-";
+    startRolling(state.diceCount, activeName() + "の挑戦開始。ストップで出目を確定します。");
+  }
+
+  function startRolling(count, message) {
+    clearTimers();
+    state.rolling = true;
+    state.rollingCount = count;
+    state.selected = {};
+    state.dice = rollDice(count);
+    el("message").textContent = message || "サイコロを振っています。";
+    addHistory(activeName() + "：サイコロを振り始めました");
+    state.rollingTimer = setInterval(function () {
+      state.dice = rollDice(state.rollingCount);
+      render();
+    }, 80);
+    render();
+
+    if (state.active === "cpu") {
+      state.cpuTimer = setTimeout(function () {
+        stopRolling();
+      }, 1000);
+    }
+  }
+
+  function stopRolling() {
+    if (!state.rolling) return;
+    clearTimers();
+    state.rolling = false;
+    state.dice = rollDice(state.rollingCount);
+    addHistory(activeName() + "：出目確定 → " + state.dice.join("・"));
+    render();
+    checkStuck();
+
+    if (state.active === "cpu" && getCombos(state.dice).length > 0) {
+      state.cpuTimer = setTimeout(cpuStep, 650);
+    }
+  }
+
+  function removeSelected() {
+    if (state.rolling) return;
+    var info = selectedRemovalInfo();
+    if (!info.ok) return;
+
+    var r = 0;
+    for (var g = 0; g < info.groups.length; g++) r += reward(info.groups[g]);
+    activeObj().chips += r;
+
+    var ids = selectedIndices();
+    ids.sort(function (a, b) { return b - a; });
+    for (var i = 0; i < ids.length; i++) state.dice.splice(ids[i], 1);
+
+    var groupText = [];
+    for (var k = 0; k < info.groups.length; k++) groupText.push(info.groups[k].join("＋"));
+
+    addHistory(activeName() + "：" + groupText.join(" / ") + "を除外" + (r ? " / チップ+" + r : ""));
+    state.selected = {};
+
+    if (state.dice.length === 0) {
+      finishChallenge(0);
+      return;
+    }
+
+    var remaining = state.dice.length;
+    startRolling(remaining, activeName() + "：残り" + remaining + "個を振っています。");
+  }
+
+  function checkStuck() {
+    if (state.rolling) return;
+    var combos = getCombos(state.dice);
+    var p = activeObj();
+
+    if (combos.length === 0 && state.dice.length > 0) {
+      if (state.rerollRule && p.chips >= 5) {
+        el("message").textContent = activeName() + "は5を作れません。チップ5枚で振り直せます。";
+        if (state.active === "cpu") {
+          state.cpuTimer = setTimeout(function () { useReroll(); }, 650);
+        }
+      } else {
+        el("message").textContent = activeName() + "は5を作れません。挑戦終了です。";
+        if (state.active === "cpu") {
+          state.cpuTimer = setTimeout(function () { finishChallenge(null); }, 650);
+        }
+      }
+    } else {
+      el("message").textContent = activeName() + "の番です。合計5になるサイコロを選んでください。";
+    }
+    render();
+  }
+
+  function useReroll() {
+    if (state.rolling) return;
+    var p = activeObj();
+    if (!state.rerollRule || p.chips < 5 || getCombos(state.dice).length > 0) return;
+    p.chips -= 5;
+    addHistory(activeName() + "：チップ5枚を使って振り直し");
+    startRolling(state.dice.length, activeName() + "：チップ5枚で振り直しています。");
+  }
+
+  function finishChallenge(score) {
+    clearTimers();
+    state.rolling = false;
+    var p = activeObj();
+    var s = score === null ? arrSum(state.dice) : score;
+    p.current = s;
+    p.total += s;
+    p.finished = true;
+    addHistory(activeName() + "の失点：" + s + "点");
+    el("message").textContent = activeName() + "の挑戦終了。失点は" + s + "点です。";
+
+    if (state.mode === "solo") {
+      nextRoundOrFinish();
+    } else {
+      if (state.active === "player") {
+        render();
+        state.cpuTimer = setTimeout(function () { startChallenge("cpu"); }, 700);
+      } else {
+        nextRoundOrFinish();
+      }
+    }
+    render();
+  }
+
+  function nextRoundOrFinish() {
+    var done = state.mode === "solo" ? state.player.finished : (state.player.finished && state.cpu.finished);
+    if (!done) return;
+
+    if (state.round >= state.roundMax) {
+      finishGame();
+      return;
+    }
+
+    state.round++;
+    state.player.finished = false;
+    state.cpu.finished = state.mode === "solo";
+    addHistory("--- ラウンド" + state.round + "へ ---");
+    state.cpuTimer = setTimeout(function () { startChallenge("player"); }, 700);
+  }
+
+  function finishGame() {
+    clearTimers();
+    state.started = false;
+    state.rolling = false;
+    var msg = "ゲーム終了！\n";
+    if (state.mode === "solo") {
+      msg += "合計失点：" + state.player.total + "点";
+    } else {
+      if (state.player.total < state.cpu.total) msg += "あなたの勝ち！ あなた " + state.player.total + "点 / CPU " + state.cpu.total + "点";
+      else if (state.player.total > state.cpu.total) msg += "CPUの勝ち。あなた " + state.player.total + "点 / CPU " + state.cpu.total + "点";
+      else msg += "引き分け！ あなた " + state.player.total + "点 / CPU " + state.cpu.total + "点";
+    }
+    el("message").textContent = msg;
+    addHistory(msg.replace("\n", " "));
+    render();
+  }
+
+  function chooseCpuCombo() {
+    var combos = getCombos(state.dice);
+    if (combos.length === 0) return null;
+
+    function score(c) {
+      var rem = [];
+      for (var i = 0; i < state.dice.length; i++) {
+        if (c.indices.indexOf(i) === -1) rem.push(state.dice[i]);
+      }
+      var sc = 0;
+      var rw = reward(c.values);
+      sc += rw * 80;
+      sc += c.values.length * 70;
+      sc -= arrSum(rem) * 4;
+      for (var j = 0; j < rem.length; j++) {
+        if (rem[j] === 6) sc -= 25;
+      }
+      return sc;
+    }
+
+    var best = combos[0], bestScore = score(best);
+    for (var k = 1; k < combos.length; k++) {
+      var s = score(combos[k]);
+      if (s > bestScore) {
+        best = combos[k];
+        bestScore = s;
+      }
+    }
+    return best;
+  }
+
+  function cpuStep() {
+    if (state.active !== "cpu" || !state.started || state.rolling) return;
+    var c = chooseCpuCombo();
+    if (!c) {
+      checkStuck();
+      return;
+    }
+    state.selected = {};
+    for (var i = 0; i < c.indices.length; i++) state.selected[c.indices[i]] = true;
+    render();
+    state.cpuTimer = setTimeout(removeSelected, 650);
+  }
+
+  function clickDie(index) {
+    if (!state.started || state.active !== "player" || state.rolling) return;
+    state.selected[index] = !state.selected[index];
+    render();
+  }
+
+  function renderDice() {
+    var area = el("diceArea");
+    area.innerHTML = "";
+    if (state.dice.length === 0) {
+      area.innerHTML = '<div class="small">サイコロはありません。</div>';
+      return;
+    }
+    for (var i = 0; i < state.dice.length; i++) {
+      var d = document.createElement("div");
+      d.className = "die" + (state.selected[i] ? " selected" : "") + (state.rolling ? " rolling" : "");
+      d.textContent = state.dice[i];
+      (function (idx) {
+        d.onclick = function () { clickDie(idx); };
+      })(i);
+      area.appendChild(d);
+    }
+  }
+
+  function renderCombos() {
+    var list = el("comboList");
+    list.innerHTML = "";
+    if (state.rolling) {
+      list.innerHTML = '<span class="small">サイコロを振っています。</span>';
+      return;
+    }
+    var combos = getCombos(state.dice);
+    if (combos.length === 0) {
+      list.innerHTML = '<span class="small">作れる5はありません。</span>';
+      return;
+    }
+    var best = state.active === "cpu" ? chooseCpuCombo() : null;
+    for (var i = 0; i < combos.length; i++) {
+      var span = document.createElement("span");
+      span.className = "combo-chip";
+      if (best && best.indices.join(",") === combos[i].indices.join(",")) {
+        span.className += " best";
+      }
+      var r = reward(combos[i].values);
+      span.textContent = combos[i].values.join("＋") + (r ? " / +" + r + "枚" : "");
+      list.appendChild(span);
+    }
+  }
+
+  function renderHistory() {
+    var h = el("history");
+    h.innerHTML = "";
+    for (var i = 0; i < state.history.length && i < 80; i++) {
+      var div = document.createElement("div");
+      div.className = "history-item";
+      div.textContent = state.history[i];
+      h.appendChild(div);
+    }
+  }
+
+  function render() {
+    el("roundInfo").textContent = state.started ? ("ラウンド " + state.round + " / " + state.roundMax) : "未開始";
+    el("ruleInfo").textContent = (state.oneSet ? "1セット制ON" : "複数消しOK") + " / " + (state.chipRule ? "チップON" : "チップOFF") + " / " + (state.rerollRule ? "振り直しON" : "振り直しOFF");
+    el("playerTotal").textContent = state.player.total;
+    el("cpuTotal").textContent = state.mode === "solo" ? "-" : state.cpu.total;
+    el("playerCurrent").textContent = state.player.current;
+    el("cpuCurrent").textContent = state.mode === "solo" ? "-" : state.cpu.current;
+    el("playerChips").textContent = state.player.chips;
+    el("cpuChips").textContent = state.mode === "solo" ? "-" : state.cpu.chips;
+    el("turnInfo").textContent = state.started ? ("現在の番：" + activeName() + " / 残りサイコロ " + state.dice.length + "個") : "ゲームを開始してください";
+
+    var st = arrSum(selectedValues());
+    var removalInfo = selectedRemovalInfo();
+    el("selectedSum").textContent = st;
+    el("selectedSum").className = removalInfo.ok ? "ok" : (st > 5 ? "ng" : "");
+
+    var canMakeFive = !state.rolling && getCombos(state.dice).length > 0;
+    el("stopButton").disabled = !state.started || !state.rolling || state.active !== "player";
+    el("removeButton").disabled = !state.started || state.rolling || state.active !== "player" || !selectedIsFive();
+    el("rerollButton").disabled = !state.started || state.rolling || state.active !== "player" || !state.rerollRule || activeObj().chips < 5 || canMakeFive;
+    el("endButton").disabled = !state.started || state.rolling || state.active !== "player";
+
+    el("boxPlayer").className = "scorebox" + (state.started && state.active === "player" ? " active" : "");
+    el("boxCpu").className = "scorebox" + (state.started && state.active === "cpu" ? " active" : "");
+
+    renderDice();
+    renderCombos();
+    renderHistory();
+  }
+
+  function init() {
+    el("jsStatus").textContent = "JavaScriptは動作中です。ゲーム開始ボタンを押せます。";
+    el("jsStatus").className = "ok";
+    el("startButton").onclick = startGame;
+    el("resetButton").onclick = resetGame;
+    el("stopButton").onclick = stopRolling;
+    el("removeButton").onclick = removeSelected;
+    el("rerollButton").onclick = useReroll;
+    el("endButton").onclick = function () { finishChallenge(null); };
+    el("mode").onchange = function () { readSettings(); render(); };
+    resetGame();
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
+  } else {
+    init();
+  }
+})();
+</script>
+</body>
+</html>
